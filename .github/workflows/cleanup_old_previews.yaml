@@ -1,0 +1,124 @@
+name: Cleanup Old Preview Deployments
+
+# Run daily at 2 AM UTC to clean up preview deployments that haven't been updated in the past 2 days
+# Schedule temporarily disabled - workflow must be manually triggered
+on:
+  # schedule:
+  #   - cron: '0 2 * * *'  # Daily at 2:00 AM UTC
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  cleanup_old_previews:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Required for OIDC
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.0.0
+        with:
+          role-to-assume: arn:aws:iam::604741711296:role/release-dash-cicd-preview
+          aws-region: us-west-2
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@7f7e5ba5ea3e491b92e6e8e5819963f8f3a1f076 # v3.0.0
+
+      - name: Install Helm
+        uses: azure/setup-helm@20d2b4f98d41febe2bbca46408499dbb535b6258 # v3.0.0
+        with:
+          version: '3.12.0'
+
+      - name: Configure kubectl for EKS
+        run: |
+          aws eks update-kubeconfig --name staging --region us-west-2
+
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: List and cleanup old preview deployments
+        run: |
+          set -e
+          
+          # Get current timestamp (Unix epoch in seconds)
+          CURRENT_TIME=$(date +%s)
+          # 2 days in seconds = 2 * 24 * 60 * 60 = 172800
+          TWO_DAYS_AGO=$((CURRENT_TIME - 172800))
+          
+          echo "Current time: $(date -u -d @$CURRENT_TIME +"%Y-%m-%d %H:%M:%S UTC")"
+          echo "Deleting previews that haven't been updated since: $(date -u -d @$TWO_DAYS_AGO +"%Y-%m-%d %H:%M:%S UTC")"
+          echo ""
+          
+          # List all Helm releases in platform-preview namespace
+          RELEASES=$(helm list -n platform-preview --output json | jq -r '.[] | select(.name | startswith("release-dash-preview-")) | "\(.name)|\(.updated)"')
+          
+          if [ -z "$RELEASES" ]; then
+            echo "No preview deployments found."
+            exit 0
+          fi
+          
+          DELETED_COUNT=0
+          KEPT_COUNT=0
+          
+          while IFS='|' read -r RELEASE_NAME UPDATED_TIME; do
+            # Validate RELEASE_NAME to prevent command injection
+            # Only allow alphanumeric, hyphens, and underscores, and must start with expected prefix
+            if ! echo "$RELEASE_NAME" | grep -qE '^release-dash-preview-[0-9]+$'; then
+              echo "⚠️  Warning: Invalid release name format: $RELEASE_NAME, skipping"
+              continue
+            fi
+            
+            # Convert Helm's updated time to Unix timestamp using Python
+            # Helm returns dates in format: "2025-09-24 14:10:56.883355808 +0000 UTC"
+            PYTHON_SCRIPT=$(mktemp)
+            echo 'import sys' > "$PYTHON_SCRIPT"
+            echo 'import re' >> "$PYTHON_SCRIPT"
+            echo 'from datetime import datetime' >> "$PYTHON_SCRIPT"
+            echo 'try:' >> "$PYTHON_SCRIPT"
+            echo '    dt_str = sys.argv[1]' >> "$PYTHON_SCRIPT"
+            echo '    # Remove " UTC" suffix if present' >> "$PYTHON_SCRIPT"
+            echo '    dt_str = dt_str.replace(" UTC", "")' >> "$PYTHON_SCRIPT"
+            echo '    # Handle nanoseconds: Python strptime only supports microseconds (6 digits)' >> "$PYTHON_SCRIPT"
+            echo '    # Truncate nanoseconds to microseconds if present' >> "$PYTHON_SCRIPT"
+            echo '    dt_str = re.sub(r"\.(\d{6})\d+", r".\1", dt_str)' >> "$PYTHON_SCRIPT"
+            echo '    # Parse format: "2025-09-24 14:10:56.883355 +0000"' >> "$PYTHON_SCRIPT"
+            echo '    try:' >> "$PYTHON_SCRIPT"
+            echo '        dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S.%f %z")' >> "$PYTHON_SCRIPT"
+            echo '    except ValueError:' >> "$PYTHON_SCRIPT"
+            echo '        # Fallback: try without microseconds' >> "$PYTHON_SCRIPT"
+            echo '        dt = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S %z")' >> "$PYTHON_SCRIPT"
+            echo '    print(int(dt.timestamp()))' >> "$PYTHON_SCRIPT"
+            echo 'except Exception as e:' >> "$PYTHON_SCRIPT"
+            echo '    print("0", file=sys.stderr)' >> "$PYTHON_SCRIPT"
+            echo '    sys.exit(1)' >> "$PYTHON_SCRIPT"
+            UPDATED_EPOCH=$(python3 "$PYTHON_SCRIPT" "$UPDATED_TIME" 2>/dev/null || echo "0")
+            rm -f "$PYTHON_SCRIPT"
+            
+            if [ "$UPDATED_EPOCH" = "0" ] || [ -z "$UPDATED_EPOCH" ]; then
+              echo "⚠️  Warning: Could not parse date for $RELEASE_NAME (date: $UPDATED_TIME), skipping"
+              continue
+            fi
+            
+            if [ "$UPDATED_EPOCH" -lt "$TWO_DAYS_AGO" ]; then
+              echo "🗑️  Deleting old preview: $RELEASE_NAME (last updated: $UPDATED_TIME)"
+              
+              # Delete Helm release (RELEASE_NAME is now validated)
+              if helm uninstall "$RELEASE_NAME" -n platform-preview; then
+                echo "   ✓ Successfully deleted $RELEASE_NAME"
+                DELETED_COUNT=$((DELETED_COUNT + 1))
+              else
+                echo "   ✗ Failed to delete $RELEASE_NAME"
+              fi
+            else
+              AGE_DAYS=$(( (CURRENT_TIME - UPDATED_EPOCH) / 86400 ))
+              echo "✓ Keeping preview: $RELEASE_NAME (age: ${AGE_DAYS} days)"
+              KEPT_COUNT=$((KEPT_COUNT + 1))
+            fi
+          done <<< "$RELEASES"
+          
+          echo ""
+          echo "Summary:"
+          echo "  Deleted: $DELETED_COUNT preview deployment(s)"
+          echo "  Kept: $KEPT_COUNT preview deployment(s)"

@@ -1,0 +1,41 @@
+name: Deploy Staging
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'docs/**'
+      - README.md
+
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  deploy_staging:
+    uses: slingshot-aerospace-inc/platform-workflows/.github/workflows/cd_helm.yaml@v3
+    with:
+      aws_oidc_role: arn:aws:iam::604741711296:role/release-dash-cicd-staging
+      eks_cluster: staging
+      docker_image_repository: slingshotaerospace.jfrog.io/plat-docker/release-dash
+      tags: |
+        slingshotaerospace.jfrog.io/plat-docker/release-dash:${{ github.sha }}
+      helm_release_namespace: platform
+      helm_release_name: release-dash
+      helm_chart_directory: ./helm/release-dash
+      helm_values_file: ./helm/release-dash/values.staging.yaml
+      helm_set_options: |
+        deployment-simple.image.tag=${{ github.sha }}
+      create_release: true
+      create_release_branch: false
+    secrets:
+      GH_BYPASS_BRANCH_CI_PAT: ${{ secrets.BYPASS_BRANCH_CI_PAT }}
+      HELM_TOKEN: ${{ secrets.JFROG_SLINGSHOTAEROSPACE_HELM_WRITER_TOKEN}}
+      HELM_USERNAME: ${{ secrets.JFROG_SLINGSHOTAEROSPACE_HELM_WRITER_USERNAME}}
+      DOCKER_USERNAME: ${{ secrets.JFROG_PLATFORM_DOCKER_WRITER_USERNAME }}
+      DOCKER_TOKEN: ${{ secrets.JFROG_PLATFORM_DOCKER_WRITER_TOKEN }}
+      DOCKER_SECRET_BUILD_ARGS: |
+        JFROG_USERNAME=${{ secrets.JFROG_PLATFORM_GRADLE_WRITER_USERNAME }}
+        JFROG_PASSWORD=${{ secrets.JFROG_PLATFORM_GRADLE_WRITER_TOKEN }}

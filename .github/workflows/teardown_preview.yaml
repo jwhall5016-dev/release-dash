@@ -1,0 +1,27 @@
+name: Teardown Preview
+
+on:
+  pull_request:
+    types: [closed, merged ]
+    branches:
+      - main
+    paths-ignore:
+      - 'docs/**'
+      - README.md
+
+concurrency:
+  group: preview-${{ github.event.pull_request.head.ref }}
+  cancel-in-progress: false
+
+jobs:
+  teardown_preview:
+    uses: slingshot-aerospace-inc/platform-workflows/.github/workflows/teardown_preview_helm.yaml@main
+    with:
+      aws_oidc_role: arn:aws:iam::604741711296:role/release-dash-cicd-preview
+      eks_cluster: staging
+      docker_registry: plat-docker
+      docker_image: release-dash
+      helm_release_namespace: platform-preview
+      helm_release_name: release-dash-preview-${{ github.event.pull_request.number }}
+    secrets:
+      DOCKER_TOKEN: ${{ secrets.JFROG_PLATFORM_DOCKER_WRITER_TOKEN }}

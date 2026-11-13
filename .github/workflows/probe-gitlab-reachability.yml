@@ -1,0 +1,30 @@
+name: Probe GitLab reachability
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: TCP/TLS to gitlab.slingshot.ai
+        run: |
+          set -euo pipefail
+          echo "Resolving gitlab.slingshot.ai ..."
+          getent hosts gitlab.slingshot.ai || true
+          echo "curl api/v4/version (no token) ..."
+          set +e
+          curl -sS -o /tmp/out -w "http_code=%{http_code}\nconnect=%{time_connect}\ntotal=%{time_total}\n" \
+            --connect-timeout 10 --max-time 30 \
+            "https://gitlab.slingshot.ai/api/v4/version"
+          rc=$?
+          set -e
+          echo "curl_exit=${rc}"
+          echo "body_prefix:"
+          head -c 400 /tmp/out || true
+          echo
+          if [[ "${rc}" -ne 0 ]]; then
+            echo "FAIL: runner could not complete request to gitlab.slingshot.ai"
+            exit 1
+          fi
+          echo "OK: host reachable (HTTP code above; 401/403 still counts as reachable)"

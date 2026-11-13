@@ -1,0 +1,76 @@
+name: Deploy Preview
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened, ready_for_review ]
+    branches:
+      - main
+    paths-ignore:
+      - '.gitignore'
+      - 'docker-compose.yaml'
+      - 'docs/**'
+      - 'HELP.md'
+      - 'README.md'
+
+concurrency:
+  group: preview-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy_preview:
+    uses: slingshot-aerospace-inc/platform-workflows/.github/workflows/cd_preview_deployment_helm.yaml@v3
+    with:
+      aws_oidc_role: arn:aws:iam::604741711296:role/release-dash-cicd-preview
+      eks_cluster: staging
+      docker_image_repository: slingshotaerospace.jfrog.io/plat-docker/release-dash
+      helm_image_tag_set_key: deployment-simple.image.tag
+      helm_fullnameoverride_set_key: deployment.fullnameOverride
+      helm_release_namespace: platform-preview
+      helm_release_name: release-dash-preview-${{ github.event.pull_request.number }}
+      helm_chart_directory: ./helm/release-dash
+      helm_values_file: ./helm/release-dash/values.preview.yaml
+      helm_set_options: |
+        deployment-simple.ingress.specs[0].hosts[0].host=release-dash-preview-${{ github.event.pull_request.number }}.slingshotstaging.com
+        deployment-simple.ingress.specs[0].tls[0].hosts[0]=release-dash-preview-${{ github.event.pull_request.number }}.slingshotstaging.com
+        deployment-simple.env.CORS_ORIGINS.value=https://release-dash-preview-${{ github.event.pull_request.number }}.slingshotstaging.com
+    secrets:
+      HELM_TOKEN: ${{ secrets.JFROG_SLINGSHOTAEROSPACE_HELM_WRITER_TOKEN}}
+      HELM_USERNAME: ${{ secrets.JFROG_SLINGSHOTAEROSPACE_HELM_WRITER_USERNAME}}
+      DOCKER_USERNAME: ${{ secrets.JFROG_PLATFORM_DOCKER_WRITER_USERNAME }}
+      DOCKER_TOKEN: ${{ secrets.JFROG_PLATFORM_DOCKER_WRITER_TOKEN }}
+      DOCKER_SECRET_BUILD_ARGS: |
+        JFROG_USERNAME=${{ secrets.JFROG_PLATFORM_GRADLE_WRITER_USERNAME }}
+        JFROG_PASSWORD=${{ secrets.JFROG_PLATFORM_GRADLE_WRITER_TOKEN }}
+
+  # Comment on PR with preview URL
+  comment_preview_url:
+    if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
+    needs: [deploy_preview]
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Get date and time
+        run: echo "DATE_TIME=$(date +%Y-%m-%d-%H:%M)" >> $GITHUB_ENV
+      
+      - name: Comment Preview URL
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          recreate: true
+          message: |
+            ## 🚀 Preview Environment Deployed
+            
+            **Timestamp:** ${{ env.DATE_TIME }}
+            
+            Your preview environment is being deployed! The ingress may take a few minutes to provision.
+            
+            **Preview URL:** https://release-dash-preview-${{ github.event.pull_request.number }}.slingshotstaging.com
+            
+            **Health Check:** https://release-dash-preview-${{ github.event.pull_request.number }}.slingshotstaging.com/healthcheck
+            
+            ⚠️ **Note:** The ALB and ingress typically take 2-5 minutes to provision. If you get a connection error, wait a few minutes and try again.
+            
+            You can check the ingress status with:
+            ```bash
+            kubectl get ingress -n platform-preview | grep release-dash-preview-${{ github.event.pull_request.number }}
+            ```
