@@ -1,0 +1,58 @@
+# Live /version endpoint catalog (served via GET /mentat/api/live-services).
+# The frontend fetches each URL from the user's browser — not the release-dash backend.
+# Update urls as each environment gains a reachable version endpoint.
+# version-path is usually /version; DST uses /version.json.
+#
+# Response bodies may use buildHash (preferred) or build_hash — both are accepted.
+
+live-services:
+  environments:
+    - staging
+    - cui-staging
+    - production
+    - production-gov
+    - cui-gov
+  services:
+    - id: talos-planning-agent
+      label: TALOS Planning Agent
+      repository: rad-talos-agents
+      version-path: /version
+      urls:
+        staging: https://talos-planning-agent.slingshotstaging.com
+        cui-staging: https://talos-planning-agent.mentat-staging.ccgov.slingshot.ai
+        production: https://talos-planning-agent.slingshotaerospaceproduction.com
+        production-gov: https://talos-planning-agent.production.slingshot.software
+        cui-gov: https://talos-planning-agent.ccgov.slingshot.ai
+
+    - id: talos-single-step
+      label: TALOS Single-Step
+      repository: rad-talos-single-step
+      version-path: /version
+      urls:
+        staging: https://talos-single-step.slingshotstaging.com
+        cui-staging: https://talos-single-step.mentat-staging.ccgov.slingshot.ai
+        production: https://talos-single-step.slingshotaerospaceproduction.com
+        production-gov: https://talos-single-step.production.slingshot.software
+        cui-gov: https://talos-single-step.ccgov.slingshot.ai
+
+    - id: slingshot-simulation
+      label: Simulation API
+      repository: slingshot-apis-simulation
+      version-path: /version
+      urls:
+        staging: https://simulation.slingshotstaging.com
+        cui-staging: https://simulation-api.mentat-staging.ccgov.slingshot.ai
+        production: https://simulation.slingshotaerospaceproduction.com
+        production-gov: https://simulation-api.tvsim.production.gov.slingshot.ai
+        cui-gov: https://simulation-api.ccgov.slingshot.ai
+
+    - id: dst-virtual-core
+      label: DST Virtual Core
+      repository: dst-virtual-core
+      version-path: /version.json
+      urls:
+        staging: https://dst.slingshotstaging.com
+        cui-staging: https://dst.mentat-staging.ccgov.slingshot.ai
+        production: https://dst.slingshot.ai
+        production-gov: https://dst-lb.tvsim.production.gov.slingshot.ai
+        cui-gov: https://dst.ccgov.slingshot.ai

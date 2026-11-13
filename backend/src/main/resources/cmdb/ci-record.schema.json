@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MENTAT Configuration Item (snapshot — refresh after CMDB repo move)",
+  "type": "object",
+  "required": ["name", "category", "ci_number", "parent", "status"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "category": {
+      "type": "string",
+      "enum": ["SYS", "ENV", "REL", "DOC", "DMO", "SSC"]
+    },
+    "ci_number": {
+      "type": "string",
+      "pattern": "^MENTAT-(SYS|ENV|REL|DOC|DMO|SSC)-[0-9]{2}(\\.[A-Z](\\.[0-9]{2})?)*(-[A-Z]+-Rev[0-9]{3})?$"
+    },
+    "parent": {
+      "type": ["string", "null"]
+    },
+    "doc_type": {
+      "type": ["string", "null"],
+      "enum": ["PLAN", "PROCEDURE", "REPORT", "MATRIX", null]
+    },
+    "revision": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "in works", "retired", "pre-baseline", "awaiting approval"]
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

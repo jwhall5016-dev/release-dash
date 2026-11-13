@@ -1,0 +1,139 @@
+deployment-simple:
+  environment: preview
+
+  image:
+    repository: slingshotaerospace.jfrog.io/plat-docker/release-dash
+    pullPolicy: Always
+
+  aws:
+    account: "604741711296"
+    iam:
+      role: release-dash-preview
+
+  service:
+    targetPort: 8080
+
+  startupProbe:
+    httpGet:
+      path: /readyz
+      port: http
+    initialDelaySeconds: 10  # Wait 10 seconds before first check
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 50  # 50 * 10 = 500 seconds (~8.3 minutes) max startup time
+
+  readinessProbe:
+    httpGet:
+      path: /readyz
+      port: http
+    initialDelaySeconds: 0  # Start checking immediately after startup probe succeeds
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3  # 3 failures = 30 seconds before marking not ready
+
+  livenessProbe:
+    httpGet:
+      path: /livez
+      port: http
+    initialDelaySeconds: 0  # Start checking immediately after startup probe succeeds
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3  # 3 failures = 90 seconds before restarting
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+  tolerations:
+    - key: "platform"
+      operator: "Exists"
+      effect: "NoSchedule"
+
+  ingress:
+    enabled: true
+    specs:
+      - name: ""
+        className: "alb"
+        scheme: internet-facing
+        annotations:
+          alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+          alb.ingress.kubernetes.io/backend-protocol: HTTP
+          alb.ingress.kubernetes.io/scheme: internet-facing
+          alb.ingress.kubernetes.io/target-type: instance
+          alb.ingress.kubernetes.io/healthcheck-path: /healthcheck
+          alb.ingress.kubernetes.io/ssl-redirect: '443'
+          # Note: hostname will be overridden by deploy_preview workflow with PR-specific hostname
+        hosts:
+          - host: release-dash-preview-lb.slingshotstaging.com
+            paths:
+              - path: /
+                pathType: Exact
+              - path: /assets
+                pathType: Prefix
+              - path: /mentat
+                pathType: Prefix
+              - path: /foobar
+                pathType: Prefix
+              - path: /webhook
+                pathType: Prefix
+              - path: /healthcheck
+                pathType: Prefix
+              - path: /readyz
+                pathType: Prefix
+              - path: /livez
+                pathType: Prefix
+        tls:
+          - hosts:
+              - "release-dash-preview-lb.slingshotstaging.com"
+
+  env:
+    JFROG_URL:
+      value: https://slingshotaerospace.jfrog.io/artifactory
+    JFROG_MENTAT_REPO_KEY:
+      value: ssa-generic
+    JFROG_MENTAT_PREFIX:
+      value: generic-release-artifacts
+    JFROG_FOOBAR_REPO_KEY:
+      value: ""
+    JFROG_FOOBAR_PREFIX:
+      value: ""
+    CORS_ORIGINS:
+      value: https://release-dash-preview.slingshotstaging.com
+    CMDB_ENABLED:
+      value: "true"
+    CMDB_GITHUB_OWNER:
+      value: slingshot-aerospace-inc
+    CMDB_GITHUB_REPO:
+      value: mentatcmdb
+    CMDB_GITHUB_BRANCH:
+      value: main
+    CMDB_GITHUB_APP_ID:
+      value: "5199318"
+    CMDB_GITHUB_APP_INSTALLATION_ID:
+      value: "168195525"
+    CMDB_FOOBAR_GITHUB_OWNER:
+      value: slingshot-aerospace-inc
+    CMDB_FOOBAR_GITHUB_REPO:
+      value: foobarcmdb
+    CMDB_FOOBAR_GITHUB_BRANCH:
+      value: main
+    CMDB_WRITE_MODE:
+      value: pr
+
+  externalSecrets:
+    imagePullSecrets:
+      - jfrog-docker-imagepull
+    secretsJson:
+      jfrog:
+        secretName: /release-dash/artifact-repository/token
+        keyMappings:
+          JFROG_USERNAME: username
+          JFROG_TOKEN: token
+      cmdb-github:
+        secretName: /release-dash/cmdb-github/app
+        keyMappings:
+          CMDB_GITHUB_APP_PRIVATE_KEY: private_key

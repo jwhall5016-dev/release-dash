@@ -1,0 +1,37 @@
+# SNAPSHOT of mentat-cmdb cmdb/cis.yaml from before the repo move.
+# Refresh this fixture after the new CMDB repo is populated.
+# AUTO-GENERATED FILE. Do not edit by hand.
+# Source of truth: per-CI YAML files in systems/, environments/, etc.
+items:
+- name: TVSim Software Engineering Plan (SEMP)
+  category: DOC
+  ci_number: MENTAT-DOC-01-PLAN-Rev000
+  parent: null
+  status: pre-baseline
+  notes: Proposed CI — awaiting feedback/approval
+  doc_type: PLAN
+  revision: 0
+- name: Preview
+  category: ENV
+  ci_number: MENTAT-ENV-01
+  parent: null
+  status: awaiting approval
+  notes: Proposed CI — awaiting feedback/approval
+- name: MENTAT/TVSim Application
+  category: SYS
+  ci_number: MENTAT-SYS-01
+  parent: null
+  status: awaiting approval
+  notes: Proposed CI — awaiting feedback/approval
+- name: TALOS
+  category: SYS
+  ci_number: MENTAT-SYS-01.A
+  parent: MENTAT-SYS-01
+  status: awaiting approval
+  notes: Proposed CI — awaiting feedback/approval
+- name: Release Dashboard
+  category: SYS
+  ci_number: MENTAT-SYS-02
+  parent: null
+  status: awaiting approval
+  notes: Proposed CI — awaiting feedback/approval
